@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: ./backend
+    container_name: task-manager-backend
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      DATA_FILE: /app/data/tasks.json
+    volumes:
+      - task-data:/app/data
+    networks:
+      - task-network
+
+  frontend:
+    build: ./frontend
+    container_name: task-manager-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - task-network
+
+volumes:
+  task-data:
+
+networks:
+  task-network:
+    driver: bridge
