@@ -1,93 +1,63 @@
 import express from "express";
 import cors from "cors";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 
 const app = express();
-const PORT = Number(process.env.PORT || 3000);
-const DATA_FILE = process.env.DATA_FILE || path.join(process.cwd(), "data", "tasks.json");
+const PORT = Number(process.env.PORT || 3004);
+const HOST = process.env.HOST || "0.0.0.0";
 
-app.use(cors());
 app.use(express.json());
 
-async function readTasks() {
-  try {
-    const raw = await fs.readFile(DATA_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  }
-}
-
-async function writeTasks(tasks) {
-  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-  const tempFile = `${DATA_FILE}.tmp`;
-  await fs.writeFile(tempFile, JSON.stringify(tasks, null, 2), "utf8");
-  await fs.rename(tempFile, DATA_FILE);
-}
+// Same-origin deployment through Nginx does not require CORS.
+// CORS is enabled for local development / direct API testing.
+app.use(cors());
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "online", service: "task-manager-api", timestamp: new Date().toISOString() });
+  res.status(200).json({
+    ok: true,
+    service: "api-connection-practice",
+    message: "API connection successful",
+    timestamp: new Date().toISOString()
+  });
 });
 
-app.get("/api/tasks", async (_req, res, next) => {
-  try {
-    const tasks = await readTasks();
-    res.json(tasks);
-  } catch (error) { next(error); }
+app.get("/api/status", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "API Connection Practice",
+    runtime: process.version,
+    uptimeSeconds: Math.floor(process.uptime()),
+    port: PORT,
+    timestamp: new Date().toISOString()
+  });
 });
 
-app.post("/api/tasks", async (req, res, next) => {
-  try {
-    const title = String(req.body?.title || "").trim();
-    if (!title) return res.status(400).json({ error: "Task title is required." });
-    if (title.length > 120) return res.status(400).json({ error: "Task title must be 120 characters or fewer." });
-    const tasks = await readTasks();
-    const task = { id: randomUUID(), title, completed: false, createdAt: new Date().toISOString() };
-    tasks.unshift(task);
-    await writeTasks(tasks);
-    res.status(201).json(task);
-  } catch (error) { next(error); }
+app.get("/api/notifications", (_req, res) => {
+  res.json({
+    ok: true,
+    notifications: [
+      { id: 1, title: "API is available", detail: "The backend health check is responding.", type: "success" },
+      { id: 2, title: "Reverse proxy practice", detail: "Nginx can forward /api requests to this service.", type: "info" },
+      { id: 3, title: "PM2 process management", detail: "Use PM2 to keep the backend running.", type: "info" }
+    ]
+  });
 });
 
-app.patch("/api/tasks/:id", async (req, res, next) => {
-  try {
-    const tasks = await readTasks();
-    const index = tasks.findIndex(task => task.id === req.params.id);
-    if (index === -1) return res.status(404).json({ error: "Task not found." });
-
-    const updated = { ...tasks[index] };
-    if (Object.hasOwn(req.body || {}, "title")) {
-      const title = String(req.body.title || "").trim();
-      if (!title || title.length > 120) return res.status(400).json({ error: "Title must contain 1–120 characters." });
-      updated.title = title;
-    }
-    if (Object.hasOwn(req.body || {}, "completed")) {
-      if (typeof req.body.completed !== "boolean") return res.status(400).json({ error: "completed must be true or false." });
-      updated.completed = req.body.completed;
-    }
-    tasks[index] = updated;
-    await writeTasks(tasks);
-    res.json(updated);
-  } catch (error) { next(error); }
+app.post("/api/echo", (req, res) => {
+  res.status(200).json({
+    ok: true,
+    message: "Your frontend successfully sent data to the backend.",
+    received: req.body ?? {},
+    timestamp: new Date().toISOString()
+  });
 });
 
-app.delete("/api/tasks/:id", async (req, res, next) => {
-  try {
-    const tasks = await readTasks();
-    const remaining = tasks.filter(task => task.id !== req.params.id);
-    if (remaining.length === tasks.length) return res.status(404).json({ error: "Task not found." });
-    await writeTasks(remaining);
-    res.status(204).end();
-  } catch (error) { next(error); }
+app.use((req, res) => {
+  res.status(404).json({
+    ok: false,
+    message: `API route not found: ${req.method} ${req.path}`
+  });
 });
 
-app.use((error, _req, res, _next) => {
-  console.error(error);
-  res.status(500).json({ error: "Internal server error." });
+app.listen(PORT, HOST, () => {
+  console.log(`API practice backend listening on http://${HOST}:${PORT}`);
 });
-
-app.listen(PORT, "0.0.0.0", () => console.log(`Task Manager API listening on ${PORT}`));

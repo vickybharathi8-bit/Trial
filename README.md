@@ -1,84 +1,123 @@
-# EC2 Task Manager
+# API Connection Practice
 
-A beginner-friendly full-stack deployment project:
-- Frontend: React + Vite
-- Backend: Node.js + Express
-- Persistence: JSON file (`data/tasks.json`)
-- Deployment: Docker Compose + Nginx reverse proxy
+A responsive React + Vite frontend and Node.js + Express backend for practising:
+- frontend-to-backend API communication
+- Nginx reverse proxy
+- PM2 process management
+- EC2 deployment
 
-## 1. Run locally without Docker
+## Architecture
 
-Requirements: Node.js 20+.
+Browser -> Nginx (port 80/443) -> Node/Express (127.0.0.1:3004)
 
-### Backend
-```powershell
+The frontend calls relative URLs such as `/api/health`. It does not need to know the backend port.
+For local development, Vite proxies `/api` to the backend.
+
+## Project structure
+
+- `frontend/` - React application
+- `backend/` - Express API
+- `deployment/nginx-api-proxy.conf` - Nginx location example
+- `deployment/ecosystem.config.cjs` - PM2 configuration
+
+## 1. Run backend locally or on EC2
+
+```bash
 cd backend
 npm install
-npm run dev
+npm start
 ```
-Backend listens on port 3000.
 
-### Frontend
-Open another terminal:
-```powershell
+Default port is 3004. Test:
+
+```bash
+curl http://127.0.0.1:3004/api/health
+curl http://127.0.0.1:3004/api/status
+```
+
+For local testing, the server binds to `0.0.0.0`. For EC2 behind Nginx, set `HOST=127.0.0.1`.
+
+## 2. Run frontend locally
+
+In another terminal:
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
+
 Open the Vite URL shown in the terminal (normally http://localhost:5173).
+Vite forwards `/api` requests to `http://127.0.0.1:3004` using `frontend/vite.config.js`.
 
-## 2. Run with Docker Compose
+## 3. Build frontend
 
-From the project root:
-```powershell
-docker compose up --build -d
-```
-Open http://localhost:8080.
-
-Check containers:
-```powershell
-docker compose ps
-```
-View logs:
-```powershell
-docker compose logs -f
-```
-Stop:
-```powershell
-docker compose down
+```bash
+cd frontend
+npm run build
 ```
 
-Tasks persist in the `task-data` Docker volume. Removing containers with `docker compose down` does not remove that volume. Do not use `docker compose down -v` unless you intentionally want to delete saved tasks.
+Upload the contents of `frontend/dist/` to the frontend document root on EC2.
 
-## 3. EC2 deployment outline
+The frontend uses `/api/...` relative URLs. When the deployed frontend and Nginx reverse proxy share the same origin, changing the backend port does not require a frontend rebuild.
 
-1. Install Docker Engine and the Docker Compose plugin on the EC2 Ubuntu instance.
-2. Copy/clone this project to EC2.
-3. Run `docker compose up --build -d` from the project directory.
-4. Allow inbound TCP port 8080 in the EC2 Security Group for your own IP while testing.
-5. Browse to `http://EC2_PUBLIC_IP:8080`.
+## 4. Run backend with PM2 on EC2
 
-For production, use HTTPS and a domain/reverse proxy. This practice project intentionally uses HTTP and port 8080.
+From the backend directory:
 
-## 4. API endpoints
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/api/health` | Health check |
-| GET | `/api/tasks` | List tasks |
-| POST | `/api/tasks` | Create task |
-| PATCH | `/api/tasks/:id` | Update title/status |
-| DELETE | `/api/tasks/:id` | Delete task |
-
-Example create request:
-```json
-{
-  "title": "Deploy frontend and backend to EC2"
-}
+```bash
+npm install
+sudo npm install -g pm2
+HOST=127.0.0.1 PORT=3004 pm2 start src/server.js --name api-practice-backend
+pm2 status
+pm2 logs api-practice-backend
+pm2 startup
 ```
 
-## Architecture
+Execute the exact command PM2 prints, then run:
 
-Browser -> Nginx frontend container -> Express backend container -> JSON file in Docker volume.
+```bash
+pm2 save
+```
 
-The backend is not published directly to the internet; only the frontend's Nginx port is exposed.
+To deploy backend code updates:
+
+```bash
+npm install
+pm2 restart api-practice-backend --update-env
+```
+
+The optional `deployment/ecosystem.config.cjs` is a PM2 configuration example. If you use it, update its `cwd` to the actual backend directory on your EC2 instance before starting it.
+
+## 5. Nginx reverse proxy
+
+Add the contents of `deployment/nginx-api-proxy.conf` inside the existing `server { ... }` block that serves your frontend.
+
+Then:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Test through Nginx:
+
+```bash
+curl http://127.0.0.1/api/health
+```
+
+The Nginx `proxy_pass` target must match the backend port and bind address. Keep port 3004 private; do not add it to the EC2 Security Group when Nginx is the public entry point.
+
+## API endpoints
+
+- `GET /api/health` - health check
+- `GET /api/status` - backend runtime details
+- `GET /api/notifications` - example notifications
+- `POST /api/echo` - returns the JSON body sent by the frontend
+
+## Important
+
+- The browser must use `/api/...`, not `http://localhost:3004/...`.
+- `localhost` in browser JavaScript means the visitor's own computer.
+- The API connection badge and toast are driven by actual health-check requests.
+- The app checks the API on page load and every 10 seconds.

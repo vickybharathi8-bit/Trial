@@ -1,5 +1,5 @@
 {
-  "name": "ec2-task-manager-backend",
+  "name": "api-connection-practice-backend",
   "version": "1.0.0",
   "private": true,
   "type": "module",

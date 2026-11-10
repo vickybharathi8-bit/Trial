@@ -1,140 +1,168 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Activity, ArrowUpRight, Bell, CheckCircle2, CircleAlert, Clock3, RefreshCw, Send, Server, Wifi, WifiOff } from "lucide-react";
+
+const API = ""; // Same-origin API. Nginx routes /api to the backend.
 
 export default function App() {
-  const [tasks, setTasks] = useState([]);
-  const [title, setTitle] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [apiOnline, setApiOnline] = useState(false);
+  const [connection, setConnection] = useState("checking");
+  const [health, setHealth] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [lastChecked, setLastChecked] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [message, setMessage] = useState("Hello from the frontend");
+  const [echoResult, setEchoResult] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  const loadTasks = useCallback(async () => {
+  const showToast = (kind, text) => {
+    setToast({ kind, text });
+    window.setTimeout(() => setToast(null), 3500);
+  };
+
+  const checkConnection = useCallback(async (quiet = false) => {
     try {
-      const response = await fetch("/api/tasks");
-      if (!response.ok) throw new Error("Could not load tasks.");
-      setTasks(await response.json());
-      setApiOnline(true);
-      setError("");
-    } catch {
-      setApiOnline(false);
-      setError("Can't reach the backend. Check that the API container is running.");
-    } finally {
-      setLoading(false);
+      const response = await fetch(`${API}/api/health`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const wasConnected = connection === "connected";
+      setHealth(data);
+      setConnection("connected");
+      setLastChecked(new Date());
+      if (!quiet && !wasConnected) showToast("success", "Backend API connection established.");
+      return true;
+    } catch (error) {
+      const wasConnected = connection === "connected";
+      setConnection("disconnected");
+      setHealth(null);
+      setLastChecked(new Date());
+      if (!quiet || wasConnected) showToast("error", `Backend API unavailable: ${error.message}`);
+      return false;
     }
-  }, []);
+  }, [connection]);
 
-  useEffect(() => { loadTasks(); }, [loadTasks]);
-
-  async function addTask(event) {
-    event.preventDefault();
-    const cleanTitle = title.trim();
-    if (!cleanTitle) return;
+  const loadDashboard = useCallback(async () => {
+    const connected = await checkConnection(true);
+    if (!connected) return;
     try {
-      const response = await fetch("/api/tasks", {
+      const [statusResponse, notificationResponse] = await Promise.all([
+        fetch(`${API}/api/status`, { cache: "no-store" }),
+        fetch(`${API}/api/notifications`, { cache: "no-store" })
+      ]);
+      if (!statusResponse.ok || !notificationResponse.ok) throw new Error("Could not load API details");
+      const statusData = await statusResponse.json();
+      const notificationData = await notificationResponse.json();
+      setStatus(statusData);
+      setNotifications(notificationData.notifications || []);
+    } catch (error) {
+      showToast("error", error.message);
+    }
+  }, [checkConnection]);
+
+  useEffect(() => {
+    loadDashboard();
+    const timer = window.setInterval(() => checkConnection(true), 10000);
+    return () => window.clearInterval(timer);
+  }, [loadDashboard, checkConnection]);
+
+  async function sendTestRequest(event) {
+    event.preventDefault();
+    setBusy(true);
+    setEchoResult(null);
+    try {
+      const response = await fetch(`${API}/api/echo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: cleanTitle })
+        body: JSON.stringify({ message, source: "Pulse API Console" })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to add task.");
-      setTasks(current => [data, ...current]);
-      setTitle("");
-      setError("");
-    } catch (err) { setError(err.message); }
+      if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+      setEchoResult(data);
+      showToast("success", "POST request completed successfully.");
+    } catch (error) {
+      showToast("error", `Request failed: ${error.message}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function toggleTask(task) {
-    try {
-      const response = await fetch(`/api/tasks/${task.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed: !task.completed })
-      });
-      if (!response.ok) throw new Error("Unable to update task.");
-      const updated = await response.json();
-      setTasks(current => current.map(item => item.id === updated.id ? updated : item));
-    } catch (err) { setError(err.message); }
-  }
-
-  async function deleteTask(id) {
-    try {
-      const response = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("Unable to delete task.");
-      setTasks(current => current.filter(item => item.id !== id));
-    } catch (err) { setError(err.message); }
-  }
-
-  const visibleTasks = useMemo(() => tasks.filter(task => {
-    if (filter === "active") return !task.completed;
-    if (filter === "completed") return task.completed;
-    return true;
-  }), [tasks, filter]);
-
-  const completedCount = tasks.filter(task => task.completed).length;
+  const connected = connection === "connected";
 
   return (
     <main className="shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">✓</span><span>Task<span className="brand-accent">Flow</span></span></div>
-        <div className={`api-status ${apiOnline ? "online" : "offline"}`}>
-          <span className="status-dot" /> API {apiOnline ? "Online" : "Offline"}
+        <a className="brand" href="#"><span className="brand-mark"><Activity size={19} /></span><span>pulse<span className="brand-light">.console</span></span></a>
+        <div className="top-actions">
+          <span className={`connection-pill ${connected ? "online" : connection === "checking" ? "checking" : "offline"}`}>
+            <span className="status-dot" />{connection === "checking" ? "Checking API" : connected ? "API Connected" : "API Disconnected"}
+          </span>
+          <button className="icon-button" onClick={() => loadDashboard()} aria-label="Refresh API status"><RefreshCw size={17} /></button>
         </div>
       </header>
 
       <section className="hero">
-        <p className="eyebrow">YOUR WORKSPACE</p>
-        <h1>Make progress.<br /><span>One task at a time.</span></h1>
-        <p className="subhead">A simple place to organise what needs to get done.</p>
+        <div>
+          <div className="eyebrow"><span className="eyebrow-line" /> EC2 DEPLOYMENT PRACTICE</div>
+          <h1>Your API, <span>in sight.</span></h1>
+          <p className="hero-copy">A simple control room to verify frontend-to-backend connectivity, inspect API health, and test requests.</p>
+        </div>
+        <div className={`hero-status ${connected ? "hero-online" : "hero-offline"}`}>
+          {connected ? <Wifi size={23} /> : <WifiOff size={23} />}
+          <div><strong>{connected ? "Connection healthy" : connection === "checking" ? "Connecting..." : "Connection lost"}</strong><small>{connected ? "Backend is responding" : "Waiting for API response"}</small></div>
+        </div>
       </section>
 
-      <section className="panel">
-        <form className="add-form" onSubmit={addTask}>
-          <input value={title} onChange={event => setTitle(event.target.value)}
-            placeholder="What needs to be done?" maxLength={120} aria-label="New task" />
-          <button type="submit" disabled={!title.trim()}>Add task <span>＋</span></button>
-        </form>
+      <section className="metrics">
+        <article className="metric-card">
+          <div className="metric-head"><span>API STATUS</span><Activity size={17} /></div>
+          <div className="metric-value">{connected ? "Online" : connection === "checking" ? "Checking" : "Offline"}</div>
+          <div className="metric-foot"><span className={`mini-dot ${connected ? "green" : "red"}`} /> Live health check</div>
+        </article>
+        <article className="metric-card">
+          <div className="metric-head"><span>BACKEND SERVICE</span><Server size={17} /></div>
+          <div className="metric-value">{status?.service || "—"}</div>
+          <div className="metric-foot">Node.js {status?.runtime || "version pending"}</div>
+        </article>
+        <article className="metric-card">
+          <div className="metric-head"><span>UPTIME</span><Clock3 size={17} /></div>
+          <div className="metric-value">{status ? `${Math.floor(status.uptimeSeconds / 60)}m` : "—"}</div>
+          <div className="metric-foot">Since backend process start</div>
+        </article>
+      </section>
 
-        <div className="summary">
-          <div><strong>{tasks.length}</strong><span>Total tasks</span></div>
-          <div><strong>{tasks.length - completedCount}</strong><span>In progress</span></div>
-          <div><strong>{completedCount}</strong><span>Completed</span></div>
-        </div>
-
-        <div className="list-heading">
-          <h2>Your tasks</h2>
-          <div className="filters" aria-label="Filter tasks">
-            {["all", "active", "completed"].map(option =>
-              <button key={option} className={filter === option ? "selected" : ""}
-                onClick={() => setFilter(option)} type="button">{option}</button>
-            )}
+      <section className="content-grid">
+        <article className="panel">
+          <div className="panel-heading"><div><div className="section-kicker">CONNECTION MONITOR</div><h2>API health</h2></div><button className="text-button" onClick={() => loadDashboard()}><RefreshCw size={14} /> Refresh</button></div>
+          <div className="health-row">
+            <div className={`health-icon ${connected ? "healthy" : "unhealthy"}`}>{connected ? <CheckCircle2 size={22} /> : <CircleAlert size={22} />}</div>
+            <div className="health-text"><strong>{health?.message || (connected ? "API responded successfully" : "No successful health response yet")}</strong><span>{lastChecked ? `Last checked ${lastChecked.toLocaleTimeString()}` : "Waiting for first check"}</span></div>
+            <span className={`tiny-tag ${connected ? "tag-green" : "tag-red"}`}>{connected ? "200 OK" : "NO RESPONSE"}</span>
           </div>
-        </div>
+          <div className="endpoint-box"><span className="method">GET</span><code>/api/health</code><span className="endpoint-note">Health endpoint</span></div>
+          <div className="endpoint-box"><span className="method">GET</span><code>/api/status</code><span className="endpoint-note">Runtime details</span></div>
+          <div className="endpoint-box"><span className="method">GET</span><code>/api/notifications</code><span className="endpoint-note">Sample data</span></div>
+          <p className="muted-note">Automatic health check runs every 10 seconds while this page is open.</p>
+        </article>
 
-        {error && <div className="error">{error}</div>}
-        {loading ? <p className="empty">Loading your tasks…</p> :
-          visibleTasks.length === 0 ? (
-            <div className="empty"><span className="empty-icon">✦</span>
-              <strong>{tasks.length ? "Nothing in this view" : "Your list is clear"}</strong>
-              <span>Add a task above to get started.</span>
-            </div>
-          ) : (
-            <ul className="task-list">
-              {visibleTasks.map(task => (
-                <li key={task.id} className={task.completed ? "task completed" : "task"}>
-                  <button className="check" type="button" onClick={() => toggleTask(task)}
-                    aria-label={task.completed ? "Mark as active" : "Mark as completed"}>
-                    {task.completed ? "✓" : ""}
-                  </button>
-                  <span className="task-title">{task.title}</span>
-                  <span className="task-date">{new Date(task.createdAt).toLocaleDateString()}</span>
-                  <button className="delete" type="button" onClick={() => deleteTask(task.id)} aria-label="Delete task">×</button>
-                </li>
-              ))}
-            </ul>
-          )
-        }
+        <article className="panel test-panel">
+          <div className="panel-heading"><div><div className="section-kicker">REQUEST PLAYGROUND</div><h2>Send a test request</h2></div><span className="post-tag">POST</span></div>
+          <p className="panel-description">Send a message from the frontend to the Express backend and inspect the response.</p>
+          <form onSubmit={sendTestRequest}>
+            <label htmlFor="message">Request payload</label>
+            <textarea id="message" value={message} onChange={e => setMessage(e.target.value)} rows="3" />
+            <button className="primary-button" type="submit" disabled={busy || !connected}>{busy ? "Sending..." : "Send API request"} <Send size={15} /></button>
+          </form>
+          {echoResult && <div className="response-box"><div className="response-title"><CheckCircle2 size={15} /> API RESPONSE</div><pre>{JSON.stringify(echoResult, null, 2)}</pre></div>}
+        </article>
       </section>
-      <footer>TaskFlow <span>·</span> Full-stack deployment practice</footer>
+
+      <section className="panel activity-panel">
+        <div className="panel-heading"><div><div className="section-kicker">BACKEND RESPONSE</div><h2>Notifications & events</h2></div><span className="count-badge"><Bell size={13} /> {notifications.length} items</span></div>
+        {notifications.length ? <div className="notification-list">{notifications.map(item => <div className="notification" key={item.id}><span className={`notification-icon ${item.type}`}><Bell size={16} /></span><div><strong>{item.title}</strong><p>{item.detail}</p></div><ArrowUpRight className="event-arrow" size={16} /></div>)}</div> : <div className="empty-state">{connected ? "No notifications returned by the API." : "Notifications will appear when the backend reconnects."}</div>}
+      </section>
+
+      <footer><span> PULSE.CONSOLE <i /> API CONNECTION LAB</span><span>Built for deployment practice</span></footer>
+
+      {toast && <div className={`toast ${toast.kind}`} role="status"><span>{toast.kind === "success" ? <CheckCircle2 size={18} /> : <CircleAlert size={18} />}</span>{toast.text}<button onClick={() => setToast(null)} aria-label="Dismiss notification">×</button></div>}
     </main>
   );
 }
