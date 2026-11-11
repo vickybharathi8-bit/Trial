@@ -18,10 +18,7 @@ pipeline {
         stage('Check Environment') {
             steps {
                 sh '''
-                    echo "Node.js version:"
                     node --version
-
-                    echo "NPM version:"
                     npm --version
                 '''
             }
@@ -59,6 +56,20 @@ pipeline {
             }
         }
 
+        stage('Deploy Frontend') {
+            steps {
+                sh '''
+                    echo "Deploying frontend to Nginx..."
+
+                    mkdir -p /var/www/html/vic
+
+                    cp -r frontend/dist/. /var/www/html/vic/
+
+                    echo "Frontend deployment completed."
+                '''
+            }
+        }
+
         stage('Archive Build') {
             steps {
                 archiveArtifacts artifacts: 'frontend/dist/**, backend/src/**, backend/package.json',
@@ -69,11 +80,11 @@ pipeline {
 
     post {
         success {
-            echo 'CI Pipeline completed successfully!'
+            echo 'CI/CD pipeline completed successfully!'
         }
 
         failure {
-            echo 'Pipeline failed. Check the console output.'
+            echo 'Pipeline failed. Check console output.'
         }
     }
 }
