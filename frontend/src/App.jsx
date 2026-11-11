@@ -99,6 +99,20 @@ export default function App() {
         </div>
       </header>
 
+            <div style={{
+        margin: "18px 0",
+        padding: "14px 18px",
+        border: "1px solid #16a34a",
+        borderRadius: "10px",
+        background: "rgba(22, 163, 74, 0.10)",
+        color: "#22c55e",
+        fontSize: "14px",
+        fontWeight: 600
+      }}>
+        ✓ Latest deployment: Delivered automatically through Jenkins CI/CD
+      </div>
+
+      <section className="hero"></section>
       <section className="hero">
         <div>
           <div className="eyebrow"><span className="eyebrow-line" /> EC2 DEPLOYMENT PRACTICE</div>
