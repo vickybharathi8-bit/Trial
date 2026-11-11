@@ -109,7 +109,7 @@ export default function App() {
         fontSize: "14px",
         fontWeight: 600
       }}>
-        ✓ Latest deployment: Delivered automatically through Jenkins CI/CD
+        ✓ Latest deployment: Delivered automatically through Jenkins CI/CD by vicky
       </div>
 
       <section className="hero"></section>
