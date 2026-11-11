@@ -121,3 +121,7 @@ The Nginx `proxy_pass` target must match the backend port and bind address. Keep
 - `localhost` in browser JavaScript means the visitor's own computer.
 - The API connection badge and toast are driven by actual health-check requests.
 - The app checks the API on page load and every 10 seconds.
+
+#Jenkins
+
+-Automated the CI/CD pipeline
