@@ -99,6 +99,17 @@ export default function App() {
         </div>
       </header>
 
+      <div style={{
+  padding: "12px",
+  margin: "15px 0",
+  background: "#164e63",
+  color: "white",
+  borderRadius: "8px",
+  textAlign: "center"
+}}>
+  Feature Branch: Conflict Practice
+</div>
+
             <div style={{
         margin: "18px 0",
         padding: "14px 18px",
