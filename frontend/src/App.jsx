@@ -107,7 +107,7 @@ export default function App() {
   borderRadius: "8px",
   textAlign: "center"
 }}>
-  Feature Branch: Vicky conflict resolved
+  Feature Branch: Jenkins pull request
 </div>
 
             <div style={{
