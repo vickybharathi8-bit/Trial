@@ -48,6 +48,14 @@ pipeline {
             }
         }
 
+        stage('Frontend Lint') {
+    steps {
+        dir('frontend') {
+            sh 'npm run lint'
+        }
+    }
+}
+
         stage('Frontend Build') {
             steps {
                 dir('frontend') {
@@ -57,6 +65,9 @@ pipeline {
         }
 
         stage('Deploy Frontend') {
+            when {
+    branch 'main'
+}
             steps {
                 sh '''
                     echo "Deploying frontend to Nginx..."
